@@ -90,6 +90,7 @@ function createPost(author, content) {
         timestamp: firebase.database.ServerValue.TIMESTAMP
     };
 
+
     postsRef.push(postData)
         .then(() => {
             showMessage('投稿が完了しました！');
@@ -132,7 +133,7 @@ function formatTimestamp(timestamp) {
 // 投稿のHTML要素を生成
 function createPostElement(post) {
     return `
-        <div class="post" id="post-${post.id}">
+        <div class="post" id="post-${post.id}" data-timestamp="${post.timestamp}">
             <div class="post-header">
                 <span class="post-author">${escapeHtml(post.author)}</span>
                 <div class="post-actions">
@@ -236,8 +237,29 @@ function cancelEdit(postId) {
     postElement.removeClass('editing');
     postElement.find('textarea').val('');
 }
+// 時間制限チェック (例: 投稿後30分以内のみ許可)
+function isWithinTimeLimit(timestamp, limitMinutes = 1440) {
+    const now = Date.now(); // 現在の時刻 (ミリ秒)
+    const timeElapsed = (now - timestamp) / (1000 * 60); // 経過時間 (分)
+    return timeElapsed <= limitMinutes;
+}
+function startEdit(postId) {
+    const postElement = $(`#post-${postId}`);
+    const timestamp = parseInt(postElement.data('timestamp')); // タイムスタンプを取得
 
-// 投稿の更新：バグ入りなので要修正（更新せずに削除してしまう）
+    if (!isWithinTimeLimit(timestamp)) {
+        showMessage('この投稿は編集期間を過ぎています', 'error');
+        return;
+    }
+
+    const content = postElement.find('.post-content').text();
+    postElement.find('textarea').val(content);
+    postElement.addClass('editing');
+}
+
+
+
+// 投稿の更新
 function updatePost(postId) {
     const contentVal = $(`#edit-${postId}`).val();
     if (!validateContent(contentVal)) return;
@@ -261,14 +283,21 @@ function updatePost(postId) {
 
 // 投稿の削除
 function deletePost(postId) {
+    const postElement = $(`#post-${postId}`);
+    const timestamp = parseInt(postElement.data('timestamp')); // タイムスタンプを取得
+
+    if (!isWithinTimeLimit(timestamp)) {
+        showMessage('この投稿は削除期間を過ぎています', 'error');
+        return;
+    }
+
     if (!confirm('この投稿を削除してもよろしいですか？')) {
         return;
     }
 
-    const postElement = $(`#post-${postId}`);
     postElement.addClass('deleting');
 
-    postsRef.child(postId).remove({content: '削除されました'})
+    postsRef.child(postId).remove()
         .then(() => {
             showMessage('投稿を削除しました');
         })
@@ -324,6 +353,7 @@ window.addEventListener('unload', function() {
         postsListener = null;
     }
 });
+
     </script>
 </head>
 <body>
@@ -351,6 +381,7 @@ window.addEventListener('unload', function() {
                 <button id="postButton" class="btn-primary">投稿する</button>
             </div>
         </div>
+        
 
         <!-- 投稿一覧 -->
         <div class="posts-container">
