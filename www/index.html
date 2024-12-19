@@ -132,6 +132,7 @@ function formatTimestamp(timestamp) {
 
 // 投稿のHTML要素を生成
 function createPostElement(post) {
+    const remainingTime = isWithinTimeLimit(post.timestamp,30);
     return `
         <div class="post" id="post-${post.id}" data-timestamp="${post.timestamp}">
             <div class="post-header">
@@ -166,6 +167,9 @@ function createPostElement(post) {
                         (編集済み: ${formatTimestamp(post.updatedAt)})
                     </span>
                 ` : ''}
+                <span class="remaining-time" id="remaining-time-${post.id}">
+                    編集・削除可能時間: ${Math.ceil(remainingTime)}分
+                </span>
             </div>
         </div>
     `;
@@ -216,6 +220,7 @@ function loadPosts() {
 
         renderPosts(posts);
         $('#loadingSpinner').hide();
+        updateRemainingTimes();
     }, (error) => {
         console.error('Data fetch error:', error);
         showMessage('データの読み込みに失敗しました', 'error');
@@ -238,10 +243,11 @@ function cancelEdit(postId) {
     postElement.find('textarea').val('');
 }
 // 時間制限チェック (例: 投稿後30分以内のみ許可)
-function isWithinTimeLimit(timestamp, limitMinutes = 1440) {
+function isWithinTimeLimit(timestamp, limitMinutes = 30) {
     const now = Date.now(); // 現在の時刻 (ミリ秒)
     const timeElapsed = (now - timestamp) / (1000 * 60); // 経過時間 (分)
-    return timeElapsed <= limitMinutes;
+    const remainingTime = limitMinutes - timeElapsed; // 残り時間 (分)
+    return Math.max(remainingTime,0);
 }
 function startEdit(postId) {
     const postElement = $(`#post-${postId}`);
@@ -280,6 +286,30 @@ function updatePost(postId) {
             showMessage('更新に失敗しました：' + error.message, 'error');
         });
 }
+function updateRemainingTimes() {
+    $('.post').each(function () {
+        const postId = $(this).attr('id').split('-')[1]; // 投稿IDを取得
+        const timestamp = parseInt($(this).data('timestamp')); // タイムスタンプを取得
+        const remainingTime = isWithinTimeLimit(timestamp,30);
+
+        // 残り時間を更新
+        $(`#remaining-time-${postId}`).text(
+            remainingTime > 0
+                ? `編集・削除可能時間: ${Math.ceil(remainingTime)}分`
+                : '編集・削除期間が終了しました'
+        );
+
+        // ボタンを無効化
+        if (remainingTime <= 0) {
+            $(`#post-${postId} .btn-edit`).prop('disabled', true);
+            $(`#post-${postId} .btn-delete`).prop('disabled', true);
+        }
+    });
+}
+
+// 一定間隔で残り時間を更新
+setInterval(updateRemainingTimes, 60000); // 1分ごとに更新
+
 
 // 投稿の削除
 function deletePost(postId) {
